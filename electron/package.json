@@ -1,0 +1,38 @@
+{
+  "name": "vision-adb-flasher",
+  "version": "1.0.0",
+  "main": "main.js",
+  "scripts": {
+    "start": "npx electron .",
+    "build": "npx electron-builder"
+  },
+  "build": {
+    "appId": "com.vision.adb-flasher",
+    "productName": "Vision-ADB-Flasher",
+    "win": {
+      "target": "nsis"
+    },
+    "extraResources": [
+      {
+        "from": "../server.exe",
+        "to": "server.exe"
+      },
+      {
+        "from": "../index.html",
+        "to": "index.html"
+      },
+      {
+        "from": "../platform-tools",
+        "to": "platform-tools"
+      }
+    ],
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "devDependencies": {
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.3"
+  }
+}
