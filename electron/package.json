@@ -1,0 +1,41 @@
+{
+  "name": "adb-console",
+  "version": "1.0.0",
+  "main": "main.js",
+  "scripts": {
+    "start": "npx electron .",
+    "build": "npx electron-builder"
+  },
+  "build": {
+    "appId": "com.yourname.adb-console",
+    "productName": "ADB 刷機控制台",
+    "win": {
+      "target": "nsis"
+    },
+    "extraResources": [
+      {
+        "from": "server.exe",
+        "to": "server.exe"
+      },
+      {
+        "from": "index.html",
+        "to": "index.html"
+      },
+      {
+        "from": "platform-tools",
+        "to": "platform-tools",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "devDependencies": {
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.3"
+  }
+}
