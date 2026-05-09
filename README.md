@@ -1,5 +1,7 @@
 # ADB / Fastboot GUI Tool 📱
+
 ![Build Status](https://github.com/QwQCat-jpg147/Vision-ADB/actions/workflows/main.yml/badge.svg)
+
 這是一個基於 **Electron** 與 **Python (Flask)** 開發的輕量化 Android 裝置管理工具。它將複雜的 ADB 與 Fastboot 命令列操作轉化為直覺的圖形化介面，並內建了即時終端機串流功能，告別純文字命令列，提供現代化的深色主題 UI 與內建終端機（Console）介面。
 
 ## 🛠️ 技術架構
