@@ -1,0 +1,1444 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ADB / Fastboot 刷機工具</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.29.0/dist/tabler-icons.min.css">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=IBM+Plex+Sans+TC:wght@400;500;600&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  /* ── Palette ── softer slate-navy, not pure black */
+  --bg:      #0d1117;
+  --panel:   #161c26;
+  --surface: #1c2233;
+  --hover:   #232b3e;
+  --border:  #2c3549;
+  --border2: #222a3a;
+
+  /* ── Text ── */
+  --text:    #c5cde0;
+  --text2:   #8896b0;
+  --dim:     #4c5870;
+
+  /* ── Accents – muted, not neon ── */
+  --green:   #3ecf82;
+  --red:     #e05c5c;
+  --blue:    #5b9cf6;
+  --amber:   #d9924a;
+  --purple:  #9e84f0;
+  --cyan:    #4db8d4;
+  --teal:    #2eb89a;
+
+  --font-mono: 'JetBrains Mono', 'Cascadia Code', monospace;
+  --font-ui:   'IBM Plex Sans TC', 'Microsoft JhengHei', sans-serif;
+
+  --radius:    8px;
+  --radius-sm: 5px;
+  --radius-lg: 12px;
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+/* ════════════════════════════════════════
+   TITLEBAR
+════════════════════════════════════════ */
+/* ════════════════════════════════════════
+   LAYOUT
+════════════════════════════════════════ */
+.layout { display: flex; flex: 1; overflow: hidden; }
+
+/* ════════════════════════════════════════
+   SIDEBAR
+════════════════════════════════════════ */
+.sidebar {
+  width: 208px; flex-shrink: 0;
+  background: var(--panel); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  overflow-y: auto; overflow-x: hidden;
+}
+.sidebar::-webkit-scrollbar { width: 3px; }
+.sidebar::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+.sb-section { padding: 8px 8px 4px; }
+.sb-section + .sb-section { border-top: 1px solid var(--border2); margin-top: 2px; }
+
+.sec-label {
+  font-family: var(--font-ui); font-size: 9.5px; font-weight: 600;
+  color: var(--dim); letter-spacing: .14em; text-transform: uppercase;
+  padding: 6px 6px 4px; display: block;
+}
+
+.sbtn {
+  background: transparent; border: none; color: var(--text2);
+  font-family: var(--font-ui); font-size: 12px;
+  padding: 6px 8px; border-radius: var(--radius-sm);
+  cursor: pointer; text-align: left; width: 100%;
+  display: flex; align-items: center; gap: 8px;
+  transition: background .1s, color .1s; position: relative;
+}
+.sbtn:hover { background: var(--hover); color: var(--text); }
+.sbtn i { font-size: 14px; flex-shrink: 0; width: 16px; text-align: center; opacity: .7; }
+.sbtn:hover i { opacity: 1; }
+
+.sbtn .badge {
+  margin-left: auto; font-size: 9px;
+  background: rgba(224,92,92,.15); color: var(--red);
+  border-radius: 3px; padding: 1px 5px;
+  font-family: var(--font-ui); font-weight: 600; flex-shrink: 0;
+}
+.sbtn .badge-info {
+  margin-left: auto; font-size: 9px;
+  background: rgba(77,184,212,.12); color: var(--cyan);
+  border-radius: 3px; padding: 1px 5px; font-family: var(--font-ui); flex-shrink: 0;
+}
+
+.sb-danger { border-radius: var(--radius-sm); margin: 2px 0; }
+.sbtn.danger { color: #a07070; }
+.sbtn.danger:hover { background: rgba(224,92,92,.1); color: var(--red); }
+.sbtn.danger i { color: #a07070; }
+.sbtn.danger:hover i { color: var(--red); opacity: 1; }
+
+/* ════════════════════════════════════════
+   MAIN
+════════════════════════════════════════ */
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+
+/* Device status cards */
+.device-bar {
+  flex-shrink: 0; padding: 8px 12px;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+}
+.dev-card {
+  background: var(--panel); border: 1px solid var(--border2);
+  border-radius: var(--radius-sm); padding: 6px 10px;
+  display: flex; align-items: center; gap: 8px; min-width: 0;
+}
+.dev-card-icon { font-size: 15px; flex-shrink: 0; }
+.dev-card.adb-card .dev-card-icon { color: var(--cyan); }
+.dev-card.fb-card  .dev-card-icon { color: var(--amber); }
+.dev-card-label {
+  font-family: var(--font-ui); font-size: 9.5px; font-weight: 600;
+  color: var(--dim); letter-spacing: .08em; text-transform: uppercase;
+  display: block; line-height: 1;
+}
+.dev-card-val {
+  font-family: var(--font-mono); font-size: 11px; color: var(--text);
+  display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  margin-top: 2px;
+}
+.dev-card-val.connected { color: var(--green); font-weight: 600; }
+.dev-card-val.no-device { color: var(--dim); font-style: italic; }
+
+/* Flash + Sideload panels */
+.top-panels { flex-shrink: 0; border-bottom: 1px solid var(--border); }
+
+/* Flash section */
+.flash-section { background: var(--surface); padding: 10px 12px 12px; }
+.section-header {
+  font-family: var(--font-ui); font-size: 10px; font-weight: 600;
+  color: var(--text2); margin-bottom: 9px;
+  letter-spacing: .1em; text-transform: uppercase;
+  display: flex; align-items: center; gap: 5px;
+}
+.section-header i { font-size: 12px; }
+
+.flash-grid { display: flex; gap: 7px; align-items: flex-end; }
+.flash-col-partition { flex-shrink: 0; }
+.flash-col-path { flex: 1; min-width: 0; }
+.flash-col-btn  { flex-shrink: 0; }
+
+.field-label {
+  font-family: var(--font-ui); font-size: 10px; font-weight: 600;
+  color: var(--dim); letter-spacing: .08em; text-transform: uppercase;
+  display: block; margin-bottom: 5px;
+}
+
+.partition-select {
+  background: var(--panel); border: 1px solid var(--border);
+  color: var(--text); font-family: var(--font-mono); font-size: 12px;
+  padding: 7px 26px 7px 10px; border-radius: var(--radius);
+  cursor: pointer; outline: none; transition: border-color .2s;
+  -webkit-appearance: none; appearance: none; width: 108px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%234c5870'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 9px center;
+}
+.partition-select:focus { border-color: var(--cyan); }
+.partition-select option { background: var(--panel); }
+
+.file-box {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius); display: flex; align-items: stretch;
+  overflow: hidden; transition: border-color .2s;
+}
+.file-box:focus-within, .file-box.drag-over { border-color: var(--cyan); }
+.file-box.drag-over { background: rgba(77,184,212,.04); }
+.file-box .fb-icon {
+  color: var(--dim); font-size: 14px;
+  padding: 0 8px 0 10px; display: flex; align-items: center; flex-shrink: 0;
+}
+.file-box input {
+  background: transparent; border: none; outline: none;
+  color: var(--text); font-family: var(--font-mono); font-size: 12px;
+  flex: 1; padding: 7px 0; min-width: 0;
+}
+.file-box input::placeholder { color: var(--dim); font-style: italic; font-size: 11px; }
+.browse-btn {
+  background: var(--hover); border: none; border-left: 1px solid var(--border);
+  color: var(--text2); font-family: var(--font-ui); font-size: 11px;
+  padding: 0 11px; cursor: pointer; transition: all .12s;
+  white-space: nowrap; flex-shrink: 0; display: flex; align-items: center; gap: 4px;
+}
+.browse-btn:hover { background: var(--border); color: var(--text); }
+.browse-btn i { font-size: 13px; }
+
+.path-hint {
+  font-family: var(--font-ui); font-size: 10px; color: var(--amber);
+  margin-top: 4px; display: none; align-items: center; gap: 4px;
+}
+.path-hint i { font-size: 11px; }
+.path-hint.show { display: flex; }
+
+/* Recent paths */
+.recent-row { margin-top: 6px; display: none; }
+.recent-row.show { display: block; }
+.recent-select {
+  width: 100%; background: var(--panel); border: 1px solid var(--border2);
+  color: var(--text2); font-family: var(--font-mono); font-size: 11px;
+  padding: 5px 8px; border-radius: var(--radius-sm);
+  cursor: pointer; outline: none; transition: border-color .2s;
+  -webkit-appearance: none; appearance: none;
+}
+.recent-select option { background: var(--panel); color: var(--text); }
+
+/* Flash button */
+.flash-btn {
+  height: 100%; padding: 7px 14px;
+  background: var(--red); border: none; color: #fff;
+  font-family: var(--font-ui); font-size: 12px; font-weight: 600;
+  border-radius: var(--radius); cursor: pointer;
+  transition: background .12s, opacity .12s, transform .1s;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  white-space: nowrap; min-width: 90px;
+}
+.flash-btn:hover { background: #c94e4e; }
+.flash-btn:active { transform: scale(.97); }
+.flash-btn:disabled { background: #2d1f1f; color: #5a3535; cursor: not-allowed; transform: none; }
+.flash-btn i { font-size: 14px; }
+
+/* Flash progress bar */
+.flash-progress {
+  display: none; margin-top: 6px;
+  height: 3px; background: var(--border);
+  border-radius: 2px; overflow: hidden;
+}
+.flash-progress.show { display: block; }
+.flash-progress-bar {
+  height: 100%; width: 0%; background: var(--cyan);
+  transition: width .3s ease; border-radius: 2px;
+}
+.flash-progress-bar.indeterminate {
+  width: 30%; animation: indeterminate 1.4s infinite ease-in-out;
+}
+@keyframes indeterminate {
+  0%   { transform: translateX(-100%); width: 40%; }
+  100% { transform: translateX(350%);  width: 40%; }
+}
+
+/* Sideload section */
+.sideload-section { background: var(--surface); border-top: 1px solid var(--border); }
+.sideload-toggle {
+  width: 100%; background: transparent; border: none;
+  color: var(--text2); font-family: var(--font-ui); font-size: 10px;
+  font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+  padding: 7px 12px; cursor: pointer; text-align: left;
+  display: flex; align-items: center; gap: 7px; transition: color .15s;
+}
+.sideload-toggle:hover { color: var(--text); }
+.sideload-toggle .arrow { margin-left: auto; font-size: 12px; transition: transform .2s; }
+.sideload-toggle.open .arrow { transform: rotate(90deg); }
+.sideload-body { display: none; padding: 0 12px 10px; }
+.sideload-body.open { display: block; }
+.sideload-btn {
+  width: 100%; margin-top: 8px; background: rgba(158,132,240,.1);
+  border: 1px solid rgba(158,132,240,.2); color: var(--purple);
+  font-family: var(--font-ui); font-size: 12px; font-weight: 600;
+  padding: 8px 0; border-radius: var(--radius); cursor: pointer;
+  transition: all .15s; display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+.sideload-btn:hover { background: rgba(158,132,240,.18); border-color: rgba(158,132,240,.4); }
+.sideload-btn:disabled { background: transparent; color: var(--dim); cursor: not-allowed; border-color: var(--border); }
+
+/* Result banner */
+.result-banner {
+  display: none; margin: 6px 12px 0;
+  padding: 9px 12px; border-radius: var(--radius);
+  font-family: var(--font-ui); font-size: 12px;
+  align-items: center; gap: 10px; border: 1px solid; flex-shrink: 0;
+}
+.result-banner.show { display: flex; }
+.result-banner.success { background: rgba(62,207,130,.06); border-color: rgba(62,207,130,.2); color: var(--green); }
+.result-banner.fail    { background: rgba(224,92,92,.06);  border-color: rgba(224,92,92,.2);  color: var(--red); }
+.result-banner i.rb-icon { font-size: 18px; flex-shrink: 0; }
+.rb-title { font-weight: 700; font-size: 12px; }
+.rb-sub   { font-size: 11px; opacity: .7; margin-top: 1px; }
+.banner-close {
+  margin-left: auto; background: transparent; border: none;
+  color: inherit; cursor: pointer; opacity: .35; font-size: 16px; padding: 0 2px; line-height: 1;
+}
+.banner-close:hover { opacity: 1; }
+
+/* Console toolbar */
+.console-toolbar {
+  flex-shrink: 0; background: var(--panel);
+  border-bottom: 1px solid var(--border); border-top: 1px solid var(--border);
+  padding: 3px 10px; display: flex; align-items: center; gap: 2px; margin-top: 6px;
+}
+.tb-btn {
+  background: transparent; border: none; color: var(--dim);
+  font-family: var(--font-ui); font-size: 11px;
+  padding: 4px 8px; border-radius: 4px; cursor: pointer;
+  display: flex; align-items: center; gap: 4px; transition: all .12s; white-space: nowrap;
+}
+.tb-btn:hover { background: var(--hover); color: var(--text); }
+.tb-btn.active { color: var(--cyan); }
+.tb-btn i { font-size: 13px; }
+.tb-sep     { width: 1px; height: 12px; background: var(--border); margin: 0 2px; }
+.tb-spacer  { flex: 1; }
+.line-count { font-family: var(--font-ui); font-size: 10px; color: var(--dim); padding: 0 4px; }
+
+/* Console */
+.console {
+  flex: 1; overflow-y: auto; padding: 10px 14px;
+  font-size: 12px; line-height: 1.85;
+  scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+}
+.console::-webkit-scrollbar { width: 4px; }
+.console::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.line {
+  display: flex; gap: 8px; align-items: baseline;
+  padding: 0 4px; border-radius: 3px;
+  transition: background .1s; cursor: pointer; flex-wrap: wrap;
+}
+.line:hover { background: rgba(255,255,255,.03); }
+.ts { color: var(--dim); font-size: 10px; flex-shrink: 0; opacity: .4; user-select: none; }
+
+.c-cyan   { color: var(--cyan);   font-weight: 600; }
+.c-green  { color: var(--green);  }
+.c-red    { color: var(--red);    }
+.c-amber  { color: var(--amber);  }
+.c-dim    { color: var(--dim);    }
+.c-purple { color: var(--purple); }
+.c-blue   { color: var(--blue);   }
+.c-teal   { color: var(--teal);   }
+.c-text   { color: var(--text);   }
+
+.blk {
+  display: inline-block; width: 7px; height: 13px;
+  background: var(--cyan); animation: blink 1s infinite;
+  vertical-align: middle; margin-left: 2px;
+}
+
+/* Spinner */
+.spinner {
+  display: inline-block; width: 10px; height: 10px;
+  border: 2px solid rgba(255,255,255,.15); border-top-color: #fff;
+  border-radius: 50%; animation: spin .7s linear infinite;
+  flex-shrink: 0;
+}
+
+/* Copy toast */
+.copy-toast {
+  position: fixed; bottom: 18px; right: 18px;
+  background: #162318; border: 1px solid rgba(62,207,130,.3);
+  color: var(--green); font-family: var(--font-ui); font-size: 11px;
+  padding: 6px 13px; border-radius: 6px; z-index: 200;
+  opacity: 0; pointer-events: none; transform: translateY(6px);
+  transition: opacity .2s, transform .2s;
+}
+.copy-toast.show { opacity: 1; transform: translateY(0); }
+
+/* Drop overlay */
+.drop-overlay {
+  display: none; position: absolute; inset: 0;
+  background: rgba(77,184,212,.04);
+  border: 2px dashed rgba(77,184,212,.3);
+  z-index: 20; pointer-events: none;
+  align-items: center; justify-content: center;
+  flex-direction: column; gap: 10px;
+}
+.drop-overlay.show { display: flex; }
+.drop-overlay i { font-size: 36px; color: var(--cyan); opacity: .5; }
+.drop-overlay p { font-family: var(--font-ui); font-size: 13px; color: var(--cyan); opacity: .6; }
+
+/* Confirm dialog */
+.overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.7);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  align-items: center; justify-content: center; z-index: 100;
+}
+.overlay.show { display: flex; }
+.dialog {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 24px 26px; max-width: 380px; width: 90%;
+  text-align: center; box-shadow: 0 24px 64px rgba(0,0,0,.7);
+  animation: dlg-in .15s ease-out;
+}
+@keyframes dlg-in { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: scale(1); } }
+.dialog h3 { font-family: var(--font-ui); color: #fff; font-size: 14px; margin-bottom: 8px; font-weight: 600; }
+.dialog p  { font-family: var(--font-ui); font-size: 12px; color: var(--text2); margin-bottom: 12px; line-height: 1.75; }
+.dpath {
+  color: var(--text); font-size: 11px; background: var(--surface);
+  padding: 7px 11px; border-radius: 6px; margin-bottom: 16px;
+  word-break: break-all; font-family: var(--font-mono); text-align: left;
+  border: 1px solid var(--border);
+}
+.btn-row { display: flex; gap: 8px; justify-content: center; }
+.btn-cancel {
+  background: transparent; border: 1px solid var(--border);
+  color: var(--text2); font-family: var(--font-ui); font-size: 12px;
+  padding: 8px 20px; border-radius: 6px; cursor: pointer; transition: all .12s;
+}
+.btn-cancel:hover { background: var(--hover); color: var(--text); }
+.btn-ok {
+  background: var(--red); border: none; color: #fff;
+  font-family: var(--font-ui); font-weight: 600; font-size: 12px;
+  padding: 8px 20px; border-radius: 6px; cursor: pointer; transition: background .12s;
+}
+.btn-ok:hover { background: #c94e4e; }
+
+/* hidden file inputs */
+#native-file, #native-zip { display: none; }
+</style>
+</head>
+<body>
+
+<input type="file" id="native-file" accept=".img,*"  onchange="onFileChosen(this)">
+<input type="file" id="native-zip"  accept=".zip"    onchange="onZipChosen(this)">
+
+<div class="layout">
+
+  <div class="sidebar">
+
+    <div class="sb-section">
+      <span class="sec-label">ADB 連線</span>
+      <button class="sbtn" onclick="runStream('adb_devices','adb devices')">
+        <i class="ti ti-device-mobile" style="color:var(--cyan)"></i>ADB 裝置列表
+      </button>
+      <button class="sbtn" onclick="runStream('adb_reboot_bootloader','adb reboot bootloader')">
+        <i class="ti ti-refresh"></i>重啟至 Bootloader
+      </button>
+      <button class="sbtn" onclick="runStream('adb_reboot_recovery','adb reboot recovery')">
+        <i class="ti ti-shield-half"></i>重啟至 Recovery
+      </button>
+      <button class="sbtn" onclick="runStream('adb_reboot','adb reboot')">
+        <i class="ti ti-rotate-clockwise"></i>重啟系統
+      </button>
+    </div>
+
+    <div class="sb-section">
+      <span class="sec-label">Fastboot 連線</span>
+      <button class="sbtn" onclick="runStream('fb_devices','fastboot devices')">
+        <i class="ti ti-plug" style="color:var(--amber)"></i>FB 裝置列表
+      </button>
+      <button class="sbtn" onclick="runStream('fb_reboot','fastboot reboot')">
+        <i class="ti ti-rotate-clockwise-2"></i>Fastboot 重啟
+      </button>
+      <button class="sbtn" onclick="runStream('fb_reboot_recovery','fastboot reboot recovery')">
+        <i class="ti ti-shield-bolt"></i>FB → Recovery
+      </button>
+      <button class="sbtn" onclick="runStream('fb_reboot_bootloader','fastboot reboot bootloader')">
+        <i class="ti ti-arrow-back-up"></i>FB → Bootloader
+      </button>
+    </div>
+
+    <div class="sb-section">
+      <span class="sec-label">裝置資訊</span>
+      <button class="sbtn" onclick="quickInfo()">
+        <i class="ti ti-layout-dashboard" style="color:var(--teal)"></i>Quick Info
+        <span class="badge-info">一鍵</span>
+      </button>
+      <button class="sbtn" onclick="runStream('fb_getvar','fastboot getvar all')">
+        <i class="ti ti-list"></i>FB 所有變數
+      </button>
+      <button class="sbtn" onclick="runStream('adb_model','adb getprop 型號')">
+        <i class="ti ti-device-mobile"></i>裝置型號
+      </button>
+      <button class="sbtn" onclick="runStream('adb_version','adb getprop 版本')">
+        <i class="ti ti-tag"></i>Android 版本
+      </button>
+      <button class="sbtn" onclick="runStream('adb_serial','adb getprop 序號')">
+        <i class="ti ti-fingerprint"></i>序號
+      </button>
+      <button class="sbtn" onclick="runStream('adb_cpu','adb getprop CPU ABI')">
+        <i class="ti ti-cpu"></i>CPU ABI
+      </button>
+      <button class="sbtn" onclick="runStream('adb_battery','adb dumpsys battery')">
+        <i class="ti ti-battery-2"></i>電池狀態
+      </button>
+      <button class="sbtn" onclick="runStream('adb_storage','adb df /data')">
+        <i class="ti ti-device-sd-card"></i>儲存空間
+      </button>
+    </div>
+
+    <div class="sb-section">
+      <span class="sec-label">快速刷入</span>
+      <div class="sb-danger">
+        <button class="sbtn danger" onclick="quickFlash('boot')">
+          <i class="ti ti-bolt"></i>刷入 Boot
+        </button>
+        <button class="sbtn danger" onclick="quickFlash('recovery')">
+          <i class="ti ti-shield-bolt"></i>刷入 Recovery
+        </button>
+        <button class="sbtn danger" onclick="quickFlash('system')">
+          <i class="ti ti-database"></i>刷入 System
+        </button>
+        <button class="sbtn danger" onclick="quickFlash('vendor')">
+          <i class="ti ti-circuit-board"></i>刷入 Vendor
+        </button>
+        <button class="sbtn danger" onclick="quickFlash('dtbo')">
+          <i class="ti ti-topology-star"></i>刷入 DTBO
+        </button>
+        <button class="sbtn danger" onclick="quickFlash('vbmeta')">
+          <i class="ti ti-lock-square"></i>刷入 VBMeta
+        </button>
+      </div>
+    </div>
+
+    <div class="sb-section">
+      <span class="sec-label">進階操作</span>
+      <div class="sb-danger">
+        <button class="sbtn danger" onclick="runDangerous('fb_unlock','fastboot flashing unlock',
+          '解鎖 Bootloader 將<b>清除所有資料</b>並使保固失效。<br>⚠ 請先在開發者選項開啟 <b>OEM Unlocking</b>，否則指令無效。')">
+          <i class="ti ti-lock-open"></i>解鎖 Bootloader<span class="badge">危</span>
+        </button>
+        <button class="sbtn danger" onclick="runDangerous('fb_lock','fastboot flashing lock',
+          '鎖定 Bootloader 同樣將<b>清除所有資料</b>，操作不可逆！')">
+          <i class="ti ti-lock"></i>鎖定 Bootloader<span class="badge">危</span>
+        </button>
+        <button class="sbtn danger" onclick="runDangerous('fb_erase_userdata','fastboot erase userdata',
+          '即將<b>清除所有用戶資料</b>（/data 分區），操作不可逆！')">
+          <i class="ti ti-trash"></i>清除 Userdata<span class="badge">危</span>
+        </button>
+        <button class="sbtn danger" onclick="runDangerous('fb_erase_cache','fastboot erase cache',
+          '即將清除 Cache 分區，此操作不可逆。')">
+          <i class="ti ti-eraser"></i>清除 Cache<span class="badge">危</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="sb-section">
+      <span class="sec-label">工具</span>
+      <button class="sbtn" onclick="clearConsole()">
+        <i class="ti ti-trash"></i>清除終端機
+      </button>
+      <button class="sbtn" onclick="exportLog()">
+        <i class="ti ti-download"></i>匯出日誌
+      </button>
+    </div>
+
+  </div><div class="main" id="main-area">
+
+    <div class="drop-overlay" id="drop-overlay">
+      <i class="ti ti-file-download"></i>
+      <p>放開以設定路徑</p>
+    </div>
+
+    <div class="device-bar">
+      <div class="dev-card adb-card">
+        <i class="ti ti-usb dev-card-icon"></i>
+        <div style="min-width:0">
+          <span class="dev-card-label">ADB</span>
+          <span class="dev-card-val no-device" id="dev-adb">檢查中…</span>
+        </div>
+      </div>
+      <div class="dev-card fb-card">
+        <i class="ti ti-bolt dev-card-icon"></i>
+        <div style="min-width:0">
+          <span class="dev-card-label">Fastboot</span>
+          <span class="dev-card-val no-device" id="dev-fb">檢查中…</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="top-panels">
+
+      <div class="flash-section">
+        <div class="section-header">
+          <i class="ti ti-bolt" style="color:var(--amber)"></i>
+          鏡像刷入（Fastboot Flash）
+        </div>
+        <div class="flash-grid">
+
+          <div class="flash-col-partition">
+            <span class="field-label">分區</span>
+            <select class="partition-select" id="partition-select" onchange="updateFlashBtn()">
+              <option value="boot">boot</option>
+              <option value="recovery">recovery</option>
+              <option value="system">system</option>
+              <option value="vendor">vendor</option>
+              <option value="dtbo">dtbo</option>
+              <option value="vbmeta">vbmeta</option>
+            </select>
+          </div>
+
+          <div class="flash-col-path">
+            <span class="field-label">鏡像路徑</span>
+            <div class="file-box" id="file-box">
+              <i class="ti ti-folder fb-icon"></i>
+              <input type="text" id="filepath"
+                placeholder='例如：C:\Users\你的名字\Downloads\boot.img'
+                oninput="onPathInput()">
+              <button class="browse-btn" onclick="openFilePicker()">
+                <i class="ti ti-folder-open"></i>選擇
+              </button>
+            </div>
+            <div class="path-hint" id="path-hint">
+              <i class="ti ti-info-circle"></i>
+              已填入檔名，請改成完整絕對路徑後再刷入。
+            </div>
+          </div>
+
+          <div class="flash-col-btn">
+            <span class="field-label">&nbsp;</span>
+            <button class="flash-btn" id="flashbtn" onclick="triggerFlash()">
+              <i class="ti ti-bolt"></i>
+              <span id="flash-btn-label">刷入 boot</span>
+            </button>
+          </div>
+
+        </div>
+
+        <div class="flash-progress" id="flash-progress">
+          <div class="flash-progress-bar indeterminate" id="flash-progress-bar"></div>
+        </div>
+
+        <div class="recent-row" id="recent-row">
+          <select class="recent-select" id="recent-select" onchange="applyRecent(this)">
+            <option value="">── 最近使用的路徑 ──</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="sideload-section">
+        <button class="sideload-toggle" id="sideload-toggle" onclick="toggleSideload()">
+          <i class="ti ti-cloud-download"></i>
+          ADB Sideload（OTA ZIP）
+          <i class="ti ti-chevron-right arrow"></i>
+        </button>
+        <div class="sideload-body" id="sideload-body">
+          <div class="file-box">
+            <i class="ti ti-file-zip fb-icon"></i>
+            <input type="text" id="zippath" placeholder='OTA .zip 完整路徑，例如 C:\Downloads\ota.zip'>
+            <button class="browse-btn" onclick="openZipPicker()">
+              <i class="ti ti-folder-open"></i>選擇
+            </button>
+          </div>
+          <button class="sideload-btn" id="sideloadbtn" onclick="doSideload()">
+            <i class="ti ti-cloud-download"></i>ADB Sideload
+          </button>
+        </div>
+      </div>
+
+    </div><div class="result-banner" id="result-banner">
+      <i class="rb-icon ti" id="rb-icon"></i>
+      <div>
+        <div class="rb-title" id="rb-title"></div>
+        <div class="rb-sub"   id="rb-sub"></div>
+      </div>
+      <button class="banner-close" onclick="hideBanner()"><i class="ti ti-x"></i></button>
+    </div>
+
+    <div class="console-toolbar">
+      <button class="tb-btn" id="ts-btn" onclick="toggleTimestamps()">
+        <i class="ti ti-clock"></i>時間戳記
+      </button>
+      <div class="tb-sep"></div>
+      <button class="tb-btn" onclick="exportLog()">
+        <i class="ti ti-download"></i>匯出
+      </button>
+      <button class="tb-btn" onclick="clearConsole()">
+        <i class="ti ti-trash"></i>清除
+      </button>
+      <div class="tb-spacer"></div>
+      <span class="line-count" id="line-count">0 行</span>
+    </div>
+
+    <div class="console" id="console" aria-live="polite"></div>
+
+  </div></div><div class="overlay" id="overlay">
+  <div class="dialog">
+    <h3 id="dlg-title">⚠ 確認操作</h3>
+    <p id="dlg-desc"></p>
+    <div class="dpath" id="dlg-path" style="display:none"></div>
+    <div class="btn-row">
+      <button class="btn-cancel" onclick="hideDialog()">取消</button>
+      <button class="btn-ok"     id="dlg-ok" onclick="confirmAction()">確認</button>
+    </div>
+  </div>
+</div>
+
+<div class="copy-toast" id="copy-toast">✓ 已複製</div>
+
+<script>
+/* ═══════════════════════════════════════
+   STATE
+═══════════════════════════════════════ */
+var pending   = null;
+var busy      = false;
+var busyTimer = null;
+var RECENT    = 'flash_recent_v2';
+var showTs    = (localStorage.getItem('showTs') !== 'false');
+
+function el(id){ return document.getElementById(id); }
+
+/* ═══════════════════════════════════════
+   INIT
+═══════════════════════════════════════ */
+(function init(){
+  if(showTs) el('ts-btn').classList.add('active');
+  loadRecent();
+  addLine('$ sys_flash_tool v6.0', 'c-cyan');
+  addLine('─────────────────────────────────', 'c-dim');
+  addLine('正在連線至本地後端伺服器…', 'c-text');
+  addCursor(); scrollEnd();
+  setupDragDrop();
+  setupKeyboard();
+  checkStatus();
+})();
+
+/* ═══════════════════════════════════════
+   SSE STREAMING HELPER
+   支援 GET (EventSource-like) 和 POST (fetch + ReadableStream)
+═══════════════════════════════════════ */
+function streamFetch(url, fetchOpts, cbs){
+  // cbs: { onCmd, onLine, onError, onDone }
+  fetch(url, fetchOpts)
+    .then(function(resp){
+      if(!resp.ok){ cbs.onError && cbs.onError('HTTP ' + resp.status); return; }
+      var reader  = resp.body.getReader();
+      var decoder = new TextDecoder();
+      var buffer  = '';
+
+      function pump(){
+        reader.read().then(function(res){
+          if(res.done){ return; }
+          buffer += decoder.decode(res.value, {stream: true});
+          // SSE chunks are separated by \n\n
+          var chunks = buffer.split('\n\n');
+          buffer = chunks.pop();           // keep incomplete trailing chunk
+          chunks.forEach(function(chunk){
+            // find the "data: ..." line inside each chunk
+            var lines = chunk.split('\n');
+            for(var i = 0; i < lines.length; i++){
+              var line = lines[i];
+              if(!line.startsWith('data: ')) continue;
+              try{
+                var d = JSON.parse(line.slice(6));
+                if(d.cmd  !== undefined && cbs.onCmd)   cbs.onCmd(d.cmd);
+                if(d.error !== undefined && cbs.onError) cbs.onError(d.error);
+                if(d.done  && cbs.onDone)                cbs.onDone();
+                if(d.line  !== undefined && cbs.onLine)  cbs.onLine(d.line);
+              }catch(e){}
+            }
+          });
+          pump();
+        }).catch(function(e){
+          cbs.onError && cbs.onError(e.message);
+        });
+      }
+      pump();
+    })
+    .catch(function(e){
+      cbs.onError && cbs.onError(e.message);
+    });
+}
+
+/* ═══════════════════════════════════════
+   KEYBOARD SHORTCUTS
+═══════════════════════════════════════ */
+function setupKeyboard(){
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape'){
+      if(el('overlay').classList.contains('show')) hideDialog();
+      return;
+    }
+    if(e.ctrlKey){
+      if(e.key==='l'||e.key==='L'){ e.preventDefault(); clearConsole(); }
+      else if(e.key==='e'||e.key==='E'){ e.preventDefault(); exportLog(); }
+      else if(e.key==='r'||e.key==='R'){ e.preventDefault(); checkStatus(); }
+    }
+  });
+}
+
+/* ═══════════════════════════════════════
+   FILE PICKERS
+═══════════════════════════════════════ */
+async function openFilePicker(){
+  if (window.electronAPI && window.electronAPI.openFileDialog) {
+    try {
+      const filePath = await window.electronAPI.openFileDialog();
+      if (filePath) {
+        el('filepath').value = filePath;
+        el('path-hint').classList.remove('show');
+        addLine('已選擇：' + filePath, 'c-amber');
+        addCursor(); scrollEnd();
+      }
+    } catch (err) {
+      console.error('檔案對話框失敗:', err);
+      el('native-file').click();
+    }
+  } else {
+    el('native-file').click();
+  }
+}
+
+async function openZipPicker(){
+  if (window.electronAPI && window.electronAPI.openZipDialog) {
+    try {
+      const filePath = await window.electronAPI.openZipDialog();
+      if (filePath) {
+        el('zippath').value = filePath;
+        addLine('已選擇 ZIP：' + filePath, 'c-amber');
+        addCursor(); scrollEnd();
+      }
+    } catch (err) {
+      console.error('ZIP 對話框失敗:', err);
+      el('native-zip').click();
+    }
+  } else {
+    el('native-zip').click();
+  }
+}
+
+function onFileChosen(input){
+  if(!input.files || !input.files[0]) return;
+  
+  var fullPath = input.files[0].path;
+  if (!fullPath) fullPath = input.files[0].name;
+  
+  el('filepath').value = fullPath;
+  
+  if (fullPath.indexOf('\\') !== -1 || fullPath.indexOf('/') !== -1) {
+    el('path-hint').classList.remove('show');
+  } else {
+    el('path-hint').classList.add('show');
+  }
+  
+  el('filepath').focus();
+  el('filepath').select();
+  addLine('已選擇：' + fullPath, 'c-amber');
+  if (fullPath === input.files[0].name) {
+    addLine('⚠ 請將路徑改為完整絕對路徑後再刷入。', 'c-amber');
+  }
+  addCursor(); scrollEnd();
+  input.value = '';
+}
+function onZipChosen(input){
+  if(!input.files || !input.files[0]) return;
+  
+  var fullPath = input.files[0].path;
+  if (!fullPath) fullPath = input.files[0].name;
+  
+  el('zippath').value = fullPath;
+  addLine('已選擇 ZIP：' + fullPath, 'c-amber');
+  addCursor(); scrollEnd();
+  input.value = '';
+}
+function onPathInput(){
+  var v = el('filepath').value;
+  if(v.indexOf('\\') !== -1 || v.indexOf('/') !== -1){
+    el('path-hint').classList.remove('show');
+  }
+}
+
+/* ═══════════════════════════════════════
+   PARTITION / FLASH BTN
+═══════════════════════════════════════ */
+function updateFlashBtn(){
+  var p = el('partition-select').value;
+  el('flash-btn-label').textContent = '刷入 ' + p;
+}
+
+function quickFlash(partition){
+  el('partition-select').value = partition;
+  updateFlashBtn();
+  triggerFlash();
+}
+
+/* ═══════════════════════════════════════
+   FLASH TRIGGER → shows confirm dialog
+═══════════════════════════════════════ */
+function triggerFlash(){
+  var path = el('filepath').value.trim();
+  var part = el('partition-select').value;
+  if(!path){
+    addLine('⚠ 尚未填寫鏡像路徑。', 'c-amber');
+    el('filepath').focus();
+    addCursor(); scrollEnd(); return;
+  }
+  if(path.indexOf('\\') === -1 && path.indexOf('/') === -1){
+    addLine('⚠ 路徑看起來不完整，請貼上完整絕對路徑（含磁碟代號及資料夾）。', 'c-amber');
+    el('path-hint').classList.add('show');
+    addCursor(); scrollEnd(); return;
+  }
+  pending = {type:'flash', partition:part, path:path};
+  el('dlg-title').textContent = '⚠ 確認刷入操作';
+  el('dlg-desc').innerHTML =
+    '即將覆寫 <strong style="color:var(--red)">' + escapeHtml(part) + '</strong> 分區。<br>' +
+    '請確認已解鎖 Bootloader，否則可能造成磚機。';
+  el('dlg-path').textContent = 'fastboot flash ' + part + ' "' + path + '"';
+  el('dlg-path').style.display = '';
+  el('dlg-ok').textContent = '確認刷入';
+  el('overlay').classList.add('show');
+}
+
+/* ═══════════════════════════════════════
+   SIDELOAD
+═══════════════════════════════════════ */
+function toggleSideload(){
+  el('sideload-toggle').classList.toggle('open');
+  el('sideload-body').classList.toggle('open');
+}
+function doSideload(){
+  var path = el('zippath').value.trim();
+  if(!path){
+    addLine('⚠ 尚未填寫 ZIP 路徑。', 'c-amber');
+    addCursor(); scrollEnd(); return;
+  }
+  pending = {type:'sideload', path:path};
+  el('dlg-title').textContent = '⚠ 確認 ADB Sideload';
+  el('dlg-desc').innerHTML = '即將透過 ADB 刷入 OTA 包。<br>裝置需處於 <b>Recovery Sideload 模式</b>。';
+  el('dlg-path').textContent = 'adb sideload "' + path + '"';
+  el('dlg-path').style.display = '';
+  el('dlg-ok').textContent = '確認 Sideload';
+  el('overlay').classList.add('show');
+}
+
+/* ═══════════════════════════════════════
+   DANGEROUS CMDS
+═══════════════════════════════════════ */
+function runDangerous(key, label, warning){
+  pending = {type:'cmd', key:key, label:label};
+  el('dlg-title').textContent = '⚠ 高危操作確認';
+  el('dlg-desc').innerHTML = warning;
+  el('dlg-path').style.display = 'none';
+  el('dlg-ok').textContent = '確認執行';
+  el('overlay').classList.add('show');
+}
+
+/* ═══════════════════════════════════════
+   DIALOG DISPATCH
+═══════════════════════════════════════ */
+function confirmAction(){
+  hideDialog();
+  if(!pending || busy) return;
+  if(pending.type === 'flash')         execFlash(pending.partition, pending.path);
+  else if(pending.type === 'sideload') execSideload(pending.path);
+  else if(pending.type === 'cmd')      runStream(pending.key, pending.label);
+}
+function hideDialog(){ el('overlay').classList.remove('show'); pending = null; }
+
+/* ═══════════════════════════════════════
+   BUSY GUARD
+═══════════════════════════════════════ */
+function setBusy(){
+  busy = true;
+  clearTimeout(busyTimer);
+  busyTimer = setTimeout(function(){
+    if(busy){
+      busy = false;
+      addLine('⚠ 操作逾時，已自動解除鎖定狀態。', 'c-amber');
+      addCursor(); scrollEnd();
+    }
+  }, 300000);
+}
+function clearBusy(){
+  busy = false;
+  clearTimeout(busyTimer);
+}
+
+/* ═══════════════════════════════════════
+   ★ EXEC FLASH — 使用 SSE 串流
+   修正主要 Bug：改呼叫 /api/flash/stream (POST)
+   讓 fastboot 每一行輸出即時顯示
+═══════════════════════════════════════ */
+function execFlash(partition, path){
+  if(busy) return;
+  setBusy(); hideBanner();
+
+  var btn = el('flashbtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span><span>刷入中…</span>';
+
+  // 顯示進度條
+  var prog = el('flash-progress');
+  var bar  = el('flash-progress-bar');
+  prog.classList.add('show');
+  bar.className = 'flash-progress-bar indeterminate';
+
+  addLine('$ fastboot flash ' + partition + ' "' + path + '"', 'c-cyan');
+  addLine('正在建立連線並傳送鏡像…', 'c-dim', true);
+  addCursor(); scrollEnd();
+
+  var hasErr = false;
+  var lineCount = 0;
+
+  streamFetch('/api/flash/stream', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({partition: partition, path: path})
+  }, {
+    onCmd: function(cmd){
+      // 指令確認行已顯示，不重複印
+    },
+    onLine: function(line){
+      removePendingLine(); // 移除「正在建立連線」那行
+      lineCount++;
+      var cls = 'c-text';
+      if(/OKAY|Finished|success/i.test(line))   cls = 'c-green';
+      else if(/failed|error/i.test(line)){ cls = 'c-red'; hasErr = true; }
+      else if(/Sending|Writing|Erasing/i.test(line)) cls = 'c-teal';
+      else if(/\(bootloader\)/i.test(line))     cls = 'c-amber';
+      addLine(line, cls);
+      scrollEnd();
+    },
+    onError: function(msg){
+      removePendingLine(); removeCursor();
+      addLine('✗ ' + msg, 'c-red');
+      showBanner(false, '刷入失敗', msg);
+      addCursor(); scrollEnd();
+      doneFlash(false);
+    },
+    onDone: function(){
+      removePendingLine(); removeCursor();
+      if(hasErr){
+        showBanner(false, '刷入失敗', '請查看終端機輸出了解詳情。');
+      } else {
+        showBanner(true, '刷入成功！', partition + ' 分區已寫入。建議重啟確認。');
+        saveRecentPath(path);
+      }
+      addCursor(); scrollEnd();
+      doneFlash(!hasErr);
+    }
+  });
+
+  function doneFlash(ok){
+    // 進度條完成動畫
+    bar.className = 'flash-progress-bar';
+    bar.style.width = ok ? '100%' : '100%';
+    bar.style.background = ok ? 'var(--green)' : 'var(--red)';
+    setTimeout(function(){
+      prog.classList.remove('show');
+      bar.style.width = '0%';
+      bar.style.background = 'var(--cyan)';
+    }, 1200);
+
+    clearBusy();
+    btn.disabled = false;
+    var p = el('partition-select').value;
+    btn.innerHTML = '<i class="ti ti-bolt"></i><span id="flash-btn-label">刷入 ' + p + '</span>';
+  }
+}
+
+/* ═══════════════════════════════════════
+   ★ EXEC SIDELOAD — 使用 SSE 串流
+═══════════════════════════════════════ */
+function execSideload(path){
+  if(busy) return;
+  setBusy(); hideBanner();
+
+  var btn = el('sideloadbtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Sideload 中，請勿拔除裝置…';
+
+  addLine('$ adb sideload "' + path + '"', 'c-purple');
+  addLine('正在推送 OTA 包，可能需要數分鐘…', 'c-dim', true);
+  addCursor(); scrollEnd();
+
+  var hasErr = false;
+
+  streamFetch('/api/sideload/stream', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({path: path})
+  }, {
+    onLine: function(line){
+      removePendingLine();
+      var cls = /failed|error/i.test(line) ? 'c-red'
+              : /Total|success|complete|serving/i.test(line) ? 'c-green'
+              : 'c-text';
+      if(/failed|error/i.test(line)) hasErr = true;
+      addLine(line, cls);
+      scrollEnd();
+    },
+    onError: function(msg){
+      removePendingLine(); removeCursor();
+      addLine('✗ ' + msg, 'c-red');
+      showBanner(false, 'Sideload 失敗', msg);
+      addCursor(); scrollEnd();
+      doneSideload();
+    },
+    onDone: function(){
+      removePendingLine(); removeCursor();
+      showBanner(!hasErr,
+        hasErr ? 'Sideload 可能失敗' : 'Sideload 完成！',
+        hasErr ? '請查看終端機輸出。' : '請在裝置螢幕上確認安裝結果。');
+      addCursor(); scrollEnd();
+      doneSideload();
+    }
+  });
+
+  function doneSideload(){
+    clearBusy();
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ti ti-cloud-download"></i>ADB Sideload';
+  }
+}
+
+/* ═══════════════════════════════════════
+   ★ RUN PRESET — 使用 SSE 串流 (GET)
+   改呼叫 /api/run/stream/<key>
+═══════════════════════════════════════ */
+function runStream(key, label){
+  if(busy) return;
+  setBusy(); hideBanner();
+  addLine('$ ' + label, 'c-cyan');
+  addLine('執行中…', 'c-dim', true);
+  addCursor(); scrollEnd();
+
+  streamFetch('/api/run/stream/' + key, {}, {
+    onLine: function(line){
+      removePendingLine();
+      var cls = 'c-text';
+      if(/OKAY|FINISHED|device|yes|success/i.test(line)) cls = 'c-green';
+      else if(/error|not found|fail/i.test(line))        cls = 'c-red';
+      else if(/Sending|Writing|Erasing/i.test(line))     cls = 'c-teal';
+      else if(/\(bootloader\)/i.test(line))              cls = 'c-amber';
+      addLine(line, cls);
+      scrollEnd();
+    },
+    onError: function(msg){
+      removePendingLine(); removeCursor();
+      addLine('✗ ' + msg, 'c-red');
+      addCursor(); scrollEnd();
+      clearBusy();
+    },
+    onDone: function(){
+      removePendingLine(); removeCursor();
+      addCursor(); scrollEnd();
+      clearBusy();
+    }
+  });
+}
+
+/* ═══════════════════════════════════════
+   QUICK INFO（多步 ADB 查詢）
+═══════════════════════════════════════ */
+function quickInfo(){
+  if(busy) return;
+  var steps = [
+    {k:'adb_model',   l:'型號'},
+    {k:'adb_version', l:'Android 版本'},
+    {k:'adb_serial',  l:'序號'},
+    {k:'adb_cpu',     l:'CPU ABI'},
+    {k:'adb_battery', l:'電池狀態'},
+    {k:'adb_storage', l:'儲存空間 /data'},
+  ];
+  setBusy(); hideBanner();
+  addLine('$ [Quick Info] 一鍵取得裝置資訊', 'c-cyan');
+  addCursor(); scrollEnd();
+  var i = 0;
+
+  function next(){
+    if(i >= steps.length){ addCursor(); scrollEnd(); clearBusy(); return; }
+    var s = steps[i++];
+    removeCursor();
+    fetch('/api/run/' + s.k)
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        addLine('── ' + s.l + ' ──', 'c-amber');
+        if(d.error) addLine('✗ ' + d.error, 'c-red');
+        else d.output.split('\n').forEach(function(l){ l=l.trim(); if(l) addLine(l,'c-text'); });
+        scrollEnd(); next();
+      })
+      .catch(function(){ removeCursor(); addLine('✗ 連線失敗', 'c-red'); clearBusy(); });
+  }
+  removeCursor(); next();
+}
+
+/* ═══════════════════════════════════════
+   STATUS CHECK
+═══════════════════════════════════════ */
+function checkStatus(){
+  var rbtn = el('refresh-btn');
+  rbtn.classList.add('spinning');
+  el('pill-adb').className = 'status-pill pill-check';
+  el('pill-fb').className  = 'status-pill pill-check';
+  el('pill-adb-text').textContent = 'ADB …';
+  el('pill-fb-text').textContent  = 'FB …';
+  el('dev-adb').textContent = '檢查中…';
+  el('dev-fb').textContent  = '檢查中…';
+  el('dev-adb').className = 'dev-card-val no-device';
+  el('dev-fb').className  = 'dev-card-val no-device';
+
+  fetch('/api/status')
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      rbtn.classList.remove('spinning');
+
+      // ADB pill
+      el('pill-adb').className = d.adb ? 'status-pill pill-ready' : 'status-pill pill-warn';
+      el('pill-adb-text').textContent = d.adb ? 'ADB ✓' : 'ADB ✗';
+
+      // FB pill
+      el('pill-fb').className = d.fastboot ? 'status-pill pill-ready' : 'status-pill pill-warn';
+      el('pill-fb-text').textContent = d.fastboot ? 'FB ✓' : 'FB ✗';
+
+      // ADB device card
+      var adbEl = el('dev-adb');
+      if(!d.adb){
+        adbEl.textContent = '找不到 adb.exe';
+        adbEl.className = 'dev-card-val no-device';
+      } else if(d.adb_count > 0){
+        adbEl.textContent = d.adb_count + ' 台裝置已連線';
+        adbEl.className = 'dev-card-val connected';
+      } else {
+        adbEl.textContent = '無裝置';
+        adbEl.className = 'dev-card-val no-device';
+      }
+
+      // FB device card
+      var fbEl = el('dev-fb');
+      if(!d.fastboot){
+        fbEl.textContent = '找不到 fastboot.exe';
+        fbEl.className = 'dev-card-val no-device';
+      } else if(d.fb_count > 0){
+        fbEl.textContent = d.fb_count + ' 台裝置已連線';
+        fbEl.className = 'dev-card-val connected';
+      } else {
+        fbEl.textContent = '無裝置';
+        fbEl.className = 'dev-card-val no-device';
+      }
+
+      if(d.adb && d.fastboot){
+        addLine('✓ adb.exe 已找到', 'c-green');
+        addLine('✓ fastboot.exe 已找到', 'c-green');
+        if(d.adb_count > 0)  addLine('✓ ADB 裝置：' + d.adb_count + ' 台', 'c-green');
+        if(d.fb_count  > 0)  addLine('✓ Fastboot 裝置：' + d.fb_count + ' 台', 'c-green');
+        if(d.adb_count === 0 && d.fb_count === 0)
+          addLine('就緒。請連接裝置並使用左側功能，或重新整理狀態。', 'c-dim');
+      } else {
+        if(!d.adb)      addLine('✗ 找不到 adb.exe — 請確認 platform-tools 路徑', 'c-red');
+        if(!d.fastboot) addLine('✗ 找不到 fastboot.exe — 請確認 platform-tools 路徑', 'c-red');
+      }
+      addCursor(); scrollEnd();
+    })
+    .catch(function(){
+      rbtn.classList.remove('spinning');
+      el('pill-adb').className = 'status-pill pill-warn';
+      el('pill-fb').className  = 'status-pill pill-warn';
+      el('pill-adb-text').textContent = 'ADB 離線';
+      el('pill-fb-text').textContent  = 'FB 離線';
+      el('dev-adb').textContent = '後端未啟動';
+      el('dev-fb').textContent  = '後端未啟動';
+      addLine('✗ 無法連線至後端', 'c-red');
+      addLine('請先執行：python server.py', 'c-amber');
+      addCursor(); scrollEnd();
+    });
+}
+
+/* ═══════════════════════════════════════
+   DRAG & DROP
+═══════════════════════════════════════ */
+function setupDragDrop(){
+  var area = el('main-area'), overlay = el('drop-overlay'), dragCount = 0;
+  area.addEventListener('dragenter', function(e){ e.preventDefault(); dragCount++; overlay.classList.add('show'); });
+  area.addEventListener('dragleave', function(){
+    dragCount--;
+    if(dragCount <= 0){ dragCount = 0; overlay.classList.remove('show'); }
+  });
+  area.addEventListener('dragover', function(e){ e.preventDefault(); });
+  area.addEventListener('drop', function(e){
+    e.preventDefault(); dragCount = 0; overlay.classList.remove('show');
+    var file = e.dataTransfer && e.dataTransfer.files[0];
+    if(!file) return;
+    var name = file.name;
+    if(name.toLowerCase().endsWith('.zip')){
+      el('zippath').value = name;
+      if(!el('sideload-body').classList.contains('open')) toggleSideload();
+      addLine('已拖入 ZIP：' + name, 'c-amber');
+      addLine('⚠ 請填入完整絕對路徑後再 Sideload。', 'c-amber');
+    } else {
+      el('filepath').value = name;
+      el('path-hint').classList.add('show');
+      addLine('已拖入：' + name, 'c-amber');
+      addLine('⚠ 請將路徑欄改成完整絕對路徑後再刷入。', 'c-amber');
+    }
+    addCursor(); scrollEnd();
+  });
+}
+
+/* ═══════════════════════════════════════
+   RECENT PATHS
+═══════════════════════════════════════ */
+function getRecentList(){
+  try{ return JSON.parse(localStorage.getItem(RECENT) || '[]'); }catch(e){ return []; }
+}
+function saveRecentPath(path){
+  var list = getRecentList().filter(function(p){ return p !== path; });
+  list.unshift(path);
+  localStorage.setItem(RECENT, JSON.stringify(list.slice(0,8)));
+  loadRecent();
+}
+function loadRecent(){
+  var list = getRecentList();
+  var sel = el('recent-select');
+  while(sel.options.length > 1) sel.remove(1);
+  list.forEach(function(p){
+    var o = document.createElement('option');
+    o.value = p;
+    o.textContent = p.length > 70 ? '...' + p.slice(-67) : p;
+    sel.appendChild(o);
+  });
+  el('recent-row').classList.toggle('show', list.length > 0);
+}
+function applyRecent(sel){
+  if(sel.value){
+    el('filepath').value = sel.value;
+    el('path-hint').classList.remove('show');
+  }
+  sel.value = '';
+}
+
+/* ═══════════════════════════════════════
+   TIMESTAMPS
+═══════════════════════════════════════ */
+function toggleTimestamps(){
+  showTs = !showTs;
+  localStorage.setItem('showTs', showTs);
+  el('ts-btn').classList.toggle('active', showTs);
+  document.querySelectorAll('.ts').forEach(function(s){
+    s.style.display = showTs ? '' : 'none';
+  });
+}
+
+/* ═══════════════════════════════════════
+   EXPORT LOG
+═══════════════════════════════════════ */
+function exportLog(){
+  var lines = document.querySelectorAll('#console .line');
+  var out = [];
+  lines.forEach(function(line){
+    var ts = line.querySelector('.ts');
+    var sp = line.querySelector('span:not(.ts):not(.blk)');
+    if(sp) out.push((ts ? '['+ts.textContent+'] ' : '') + sp.textContent);
+  });
+  var blob = new Blob([out.join('\n')], {type:'text/plain'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'flash_log_' + new Date().toISOString().slice(0,19).replace(/[T:]/g,'-') + '.txt';
+  a.click();
+  addLine('日誌已匯出。', 'c-dim'); addCursor(); scrollEnd();
+}
+
+/* ═══════════════════════════════════════
+   CONSOLE HELPERS
+═══════════════════════════════════════ */
+function getNow(){
+  var d = new Date();
+  return [d.getHours(),d.getMinutes(),d.getSeconds()]
+    .map(function(n){ return ('0'+n).slice(-2); }).join(':');
+}
+function removeCursor(){
+  var c = el('console'), last = c.lastElementChild;
+  if(last && last.querySelector('.blk')) last.remove();
+}
+function removePendingLine(){
+  var p = el('console').querySelector('[data-pending]');
+  if(p) p.remove();
+}
+function updateLineCount(){
+  var n = el('console').querySelectorAll('.line:not([data-cursor])').length;
+  el('line-count').textContent = n + ' 行';
+}
+function addLine(text, cls, isPending){
+  removeCursor();
+  var div = document.createElement('div');
+  div.className = 'line';
+  if(isPending) div.setAttribute('data-pending','');
+  div.addEventListener('click', function(){
+    navigator.clipboard && navigator.clipboard.writeText(text).then(showCopyToast);
+  });
+  if(showTs && cls !== 'c-dim'){
+    var ts = document.createElement('span');
+    ts.className = 'ts';
+    ts.textContent = getNow();
+    div.appendChild(ts);
+  }
+  var sp = document.createElement('span');
+  sp.className = cls || 'c-text';
+  sp.textContent = text;
+  div.appendChild(sp);
+  el('console').appendChild(div);
+  updateLineCount();
+}
+function addCursor(){
+  var div = document.createElement('div');
+  div.className = 'line';
+  div.setAttribute('data-cursor','');
+  div.innerHTML = '<span class="blk"></span>';
+  el('console').appendChild(div);
+}
+function scrollEnd(){ el('console').scrollTop = el('console').scrollHeight; }
+function clearConsole(){
+  el('console').innerHTML = '';
+  hideBanner();
+  addLine('終端機已清除。', 'c-dim');
+  addCursor(); updateLineCount();
+}
+
+/* ═══════════════════════════════════════
+   COPY TOAST
+═══════════════════════════════════════ */
+var toastTimer = null;
+function showCopyToast(){
+  clearTimeout(toastTimer);
+  el('copy-toast').classList.add('show');
+  toastTimer = setTimeout(function(){ el('copy-toast').classList.remove('show'); }, 1500);
+}
+
+/* ═══════════════════════════════════════
+   RESULT BANNER
+═══════════════════════════════════════ */
+function showBanner(ok, title, sub){
+  var b = el('result-banner');
+  b.className = 'result-banner show ' + (ok ? 'success' : 'fail');
+  el('rb-icon').className = 'rb-icon ti ' + (ok ? 'ti-circle-check' : 'ti-circle-x');
+  el('rb-title').textContent = title;
+  el('rb-sub').textContent = sub;
+}
+function hideBanner(){ el('result-banner').className = 'result-banner'; }
+
+/* ═══════════════════════════════════════
+   UTILS
+═══════════════════════════════════════ */
+function escapeHtml(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+</body>
+</html>
