@@ -10,6 +10,11 @@
 * **後端服務 (Python Flask)**：本機微型伺服器 (預設運行於 Port `54321`)，負責執行子程序 (`subprocess`) 並與 Android SDK 工具 (`adb.exe`, `fastboot.exe`) 互動。
 * **前端渲染層 (HTML/JS/CSS)**：無框架的原生前端實作，使用 JetBrains Mono 字體與 Tabler Icons，負責與 Flask API 互動並彩現終端機畫面。
 
+#畫面截圖
+
+<img width="886" height="593" alt="image" src="https://github.com/user-attachments/assets/a9f58051-3486-44b8-bc81-b28dad5a9836" />
+
+
 ## 🚀 快速開始
 
 ### 1. 環境準備
